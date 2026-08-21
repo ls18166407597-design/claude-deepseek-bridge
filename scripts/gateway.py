@@ -534,7 +534,7 @@ def msg_fingerprint_no_thinking(msg):
         return ""
     c = msg.get("content")
     if isinstance(c, str):
-        return msg.get("role", "") + ":" + clean_text_for_fp(c)[:100]
+        return msg.get("role", "") + ":" + clean_text_for_fp(c)[:200]
     if isinstance(c, list):
         parts = [msg.get("role", "")]
         for b in c:
@@ -546,14 +546,14 @@ def msg_fingerprint_no_thinking(msg):
             if btype == "text":
                 t = clean_text_for_fp(b.get("text", ""))
                 if t:
-                    parts.append("text:" + t[:80])
+                    parts.append("text:" + t[:200])
             elif btype == "tool_use":
                 parts.append("tool_use:" + b.get("id", "") + ":" + b.get("name", ""))
             elif btype == "tool_result":
                 t = clean_text_for_fp(str(b.get("content", "")))
-                parts.append("tool_result:" + b.get("tool_use_id", "") + ":" + t[:80])
+                parts.append("tool_result:" + b.get("tool_use_id", "") + ":" + t[:200])
         return "|".join(parts)
-    return str(msg)[:100]
+    return str(msg)[:200]
 
 
 def extract_msg_text(msg):
@@ -767,7 +767,7 @@ def extract_usage(data):
             return json.loads(text).get("usage")
         except Exception:
             pass
-    usage = None
+    usage = {}
     for line in text.splitlines():
         if line.startswith("data: "):
             try:
@@ -776,12 +776,12 @@ def extract_usage(data):
                 continue
             if d.get("type") == "message_start":
                 m = d.get("message", {})
-                if m.get("usage"):
-                    usage = m.get("usage")
+                if m.get("usage") and isinstance(m["usage"], dict):
+                    usage.update(m["usage"])
             if d.get("type") == "message_delta":
-                if d.get("usage"):
-                    usage = d.get("usage")
-    return usage
+                if d.get("usage") and isinstance(d["usage"], dict):
+                    usage.update(d["usage"])
+    return usage if usage else None
 
 
 class Handler(BaseHTTPRequestHandler):

@@ -6,7 +6,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License">
-  <img src="https://img.shields.io/badge/Version-0.1.47-brightgreen.svg" alt="Version">
+  <img src="https://img.shields.io/badge/Version-0.1.50-brightgreen.svg" alt="Version">
   <img src="https://img.shields.io/badge/Prompt_Cache-99%25%2B-orange.svg" alt="Cache Rate">
   <img src="https://img.shields.io/badge/Thinking-100%25_Preserved-purple.svg" alt="Thinking">
   <img src="https://img.shields.io/badge/Platform-macOS_%7C_Windows-blueviolet.svg" alt="Platform">
@@ -79,6 +79,7 @@ Claude Desktop includes an internal naming filter rules regex that blocks compet
 |---|---|---|
 | **`claude-sonnet-5`** | `deepseek-v4-flash` | ⚡ Ultra-fast daily coding, 1M context (Recommended) |
 | **`claude-opus-5`** | `deepseek-v4-pro` | 🧠 Deep architectural reasoning, 1M context |
+| **`claude-sonnet-4-8`** | `x-preview-f-free` | 🎁 Ox Alpha Free 1M context reasoning (Free tier) |
 | **`claude-sonnet-4-6`** | `mimo-v2.5` | 📱 Xiaomi MiMO 2.5 Generalist Agent |
 | **`claude-opus-4-6`** | `mimo-v2.5-pro` | 📱 Xiaomi MiMO 2.5 Pro Flagship |
 

@@ -6,7 +6,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License">
-  <img src="https://img.shields.io/badge/Version-0.1.47-brightgreen.svg" alt="Version">
+  <img src="https://img.shields.io/badge/Version-0.1.50-brightgreen.svg" alt="Version">
   <img src="https://img.shields.io/badge/Prompt_Cache-99%25%2B-orange.svg" alt="Cache Rate">
   <img src="https://img.shields.io/badge/Thinking-100%25_Preserved-purple.svg" alt="Thinking">
   <img src="https://img.shields.io/badge/Platform-macOS_%7C_Windows-blueviolet.svg" alt="Platform">
@@ -97,6 +97,7 @@
 |---|---|---|
 | **`claude-sonnet-5`** | `deepseek-v4-flash` | ⚡ 日常高速编码，支持 1M 上下文（强烈推荐） |
 | **`claude-opus-5`** | `deepseek-v4-pro` | 🧠 复杂架构与深度推理，支持 1M 上下文 |
+| **`claude-sonnet-4-8`** | `x-preview-f-free` | 🎁 Ox Alpha Free 100万长上下文推理（完全免费） |
 | **`claude-sonnet-4-6`** | `mimo-v2.5` | 📱 小米 MiMO 2.5 全能版（满血 Agent 工具链） |
 | **`claude-opus-4-6`** | `mimo-v2.5-pro` | 📱 小米 MiMO 2.5 Pro 旗舰版 |
 
