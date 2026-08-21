@@ -794,10 +794,12 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
-        if self.path.split("?")[0] == "/v1/models":
+        clean_path = self.path.split("?")[0]
+        if clean_path in ("/v1/models", "/models"):
+            current_models = sorted(read_models_config().keys())
             self._send_json(200, {
                 "object": "list",
-                "data": [{"id": m, "object": "model"} for m in MODEL_LIST],
+                "data": [{"id": m, "object": "model"} for m in current_models],
             })
             log_event({
                 "ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
