@@ -1,6 +1,6 @@
 {
   "name": "ccds-bridge",
-  "version": "0.1.50",
+  "version": "0.1.51",
   "description": "Claude Desktop 3P 全厂商大模型桥接与缓存稳定化插件：无损思维链回填 (Thinking Hydration)、多位置历史折叠拼回、首日日期与计费头锁定、动态系统提醒过滤、智能供应商探测（OpenCode 5h/周/月额度 + DeepSeek 官方余额）。",
   "author": {
     "name": "ccds-bridge"

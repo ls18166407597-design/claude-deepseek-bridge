@@ -6,9 +6,9 @@ import os
 import re
 import threading
 import time
-import urllib.request
-import urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+from httppool import request_with_retry, pool_for
 
 HOST = "127.0.0.1"
 PORT_PREFERRED = int(os.environ.get("GATEWAY_PORT", "8789"))
@@ -438,6 +438,7 @@ def canonicalize(parsed):
     # Claude refreshes the date in msg[0] every day (breaks DeepSeek prefix
     # cache once per day); Codex writes it once at session creation instead.
     current_date = None
+    date_like_seen = False
     for m in parsed.get("messages", []) or []:
         if not isinstance(m, dict):
             continue
@@ -447,8 +448,19 @@ def canonicalize(parsed):
                 if mt:
                     current_date = mt.group(1)
                     break
+                if not date_like_seen and re.search(r"Today.?s date", blk["text"]):
+                    date_like_seen = True
         if current_date:
             break
+    if date_like_seen and not current_date:
+        # 客户端疑似改了日期行措辞导致 DATE_RE 失效：date_pin 将静默失效，
+        # 表现为跨天缓存击穿。记入 changes 使其在 canonicalized 日志中可见。
+        changed.append("date_pin_regex_miss")
+        log_event({
+            "ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+            "event": "date_pin_regex_miss",
+            "hint": "消息中存在疑似日期文本但 DATE_RE 未命中，请核对客户端措辞是否变更",
+        })
     date_fixed = fixed_date_for(extract_session_id(parsed), current_date)
     if date_fixed and current_date and date_fixed != current_date:
         pinned = 0
@@ -922,20 +934,21 @@ class Handler(BaseHTTPRequestHandler):
             ),
             "Accept-Language": "en-US,en;q=0.9",
         }
-        req = urllib.request.Request(upstream_url, data=payload, headers=headers, method="POST")
         try:
-            with urllib.request.urlopen(req, timeout=300) as upstream:
-                self.send_response(upstream.status)
-                self.send_header("Content-Type", upstream.headers.get("Content-Type", "application/json"))
+            key, conn, resp = request_with_retry("POST", upstream_url, payload, headers)
+            reusable = False
+            try:
+                self.send_response(resp.status)
+                self.send_header("Content-Type", resp.getheader("Content-Type", "application/json"))
                 self.send_header("Cache-Control", "no-store")
-                rid = upstream.headers.get("request-id")
+                rid = resp.getheader("request-id")
                 if rid:
                     self.send_header("request-id", rid)
                 self.end_headers()
                 chunks = bytearray()
                 disconnected = False
                 while True:
-                    chunk = upstream.read(65536)
+                    chunk = resp.read(65536)
                     if not chunk:
                         break
                     try:
@@ -944,60 +957,56 @@ class Handler(BaseHTTPRequestHandler):
                         disconnected = True
                         break
                     chunks.extend(chunk)
-                elapsed_ms = int((time.time() - started) * 1000)
-                if disconnected:
-                    log_event({
-                        "ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
-                        "method": "POST",
-                        "client": self.client_address[0],
-                        "model_mapped": parsed["model"],
-                        "event": "client_disconnected",
-                        "elapsed_ms": elapsed_ms,
-                    })
-                    return
-                usage = extract_usage(chunks)
-                bump_stats(
-                    upstream_ok=1,
-                    input_tokens=(usage or {}).get("input_tokens") or 0,
-                    cache_read=(usage or {}).get("cache_read_input_tokens") or 0,
-                    output_tokens=(usage or {}).get("output_tokens") or 0,
-                )
-                record_session(
-                    session_id,
-                    "upstream_ok",
-                    messages=len(parsed.get("messages", []) or []),
-                    usage=usage,
-                    kind=kind,
-                )
+                reusable = not disconnected and not resp.will_close
+            finally:
+                pool_for(upstream_url).release(key, conn, reusable)
+            elapsed_ms = int((time.time() - started) * 1000)
+            if disconnected:
                 log_event({
                     "ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
                     "method": "POST",
                     "client": self.client_address[0],
                     "model_mapped": parsed["model"],
-                    "event": "upstream_ok",
-                    "status": upstream.status,
+                    "event": "client_disconnected",
                     "elapsed_ms": elapsed_ms,
-                    "request_id": upstream.headers.get("request-id", ""),
                 })
-        except urllib.error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", "replace")
-            bump_stats(http_errors=1)
+                return
+            if resp.status >= 400:
+                bump_stats(http_errors=1)
+                log_event({
+                    "ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+                    "method": "POST",
+                    "client": self.client_address[0],
+                    "model_mapped": parsed["model"],
+                    "event": "upstream_http_error",
+                    "status": resp.status,
+                    "elapsed_ms": elapsed_ms,
+                })
+                return
+            usage = extract_usage(chunks)
+            bump_stats(
+                upstream_ok=1,
+                input_tokens=(usage or {}).get("input_tokens") or 0,
+                cache_read=(usage or {}).get("cache_read_input_tokens") or 0,
+                output_tokens=(usage or {}).get("output_tokens") or 0,
+            )
+            record_session(
+                session_id,
+                "upstream_ok",
+                messages=len(parsed.get("messages", []) or []),
+                usage=usage,
+                kind=kind,
+            )
             log_event({
                 "ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
                 "method": "POST",
                 "client": self.client_address[0],
                 "model_mapped": parsed["model"],
-                "event": "upstream_http_error",
-                "status": exc.code,
-                "elapsed_ms": int((time.time() - started) * 1000),
+                "event": "upstream_ok",
+                "status": resp.status,
+                "elapsed_ms": elapsed_ms,
+                "request_id": resp.getheader("request-id", "") or "",
             })
-            self.send_response(exc.code)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            try:
-                self.wfile.write(detail.encode("utf-8"))
-            except (BrokenPipeError, ConnectionResetError):
-                pass
         except Exception as exc:
             bump_stats(http_errors=1)
             log_event({

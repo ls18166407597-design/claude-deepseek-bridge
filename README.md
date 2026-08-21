@@ -6,7 +6,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License">
-  <img src="https://img.shields.io/badge/Version-0.1.50-brightgreen.svg" alt="Version">
+  <img src="https://img.shields.io/badge/Version-0.1.51-brightgreen.svg" alt="Version">
   <img src="https://img.shields.io/badge/Prompt_Cache-99%25%2B-orange.svg" alt="Cache Rate">
   <img src="https://img.shields.io/badge/Thinking-100%25_Preserved-purple.svg" alt="Thinking">
   <img src="https://img.shields.io/badge/Platform-macOS_%7C_Windows-blueviolet.svg" alt="Platform">
@@ -32,6 +32,11 @@
   - 自动剥离客户端在内存中动态注入的 `<system-reminder>` 瞬态环境小纸条，确保网络请求指纹与本地磁盘底稿 100% 精准对齐匹配，杜绝意外击穿。
 - **🛡️ 探测请求本地秒回拦截**：
   - 客户端启动时发出的 `max_tokens=1` 探测请求由本地网关直接应答，**不上云、不扣费、响应 0 毫秒**。
+- **⚡ 上游连接复用与安全重试（httppool）**：
+  - 全链路 HTTPS 连接池化（本地→云、云→上游），消除每请求 TLS 握手开销，进一步压低首字延迟；
+  - 重试边界从严：仅在「请求确定未被上游处理」时安全重试一次（发送失败 / 空闲期被对端关闭），模糊失败一律不重试，**杜绝 LLM 调用被重复计费**。
+- **🎯 转译分支真实 Token 精准透传**：
+  - MiMO 等 OpenAI 协议转译模型此前 `output_tokens` 只能按字符数估算；现直接采用上游返回的精确 `completion_tokens`，并通过标准 `message_delta` 准确透传，使客户端 Token 统计与实际账单 100% 一致。
 - **🔌 3P 设置即插即用（全自动接管）**：
   - 无需手动修改任何底层 CLI 配置文件；只需在 3P 界面填入真实供应商地址与 Key，插件开会话时**自动检测、自动备份并自动接入本地网关**。
 - **📊 专属状态监控面板（`/cc-status` 或 `/ccds-status`）**：
