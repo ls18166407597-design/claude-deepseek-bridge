@@ -12,16 +12,20 @@
   <img src="https://img.shields.io/badge/Platform-macOS_%7C_Windows-blueviolet.svg" alt="Platform">
 </p>
 
-> **Connect Claude Desktop (Code mode) seamlessly to third-party LLMs like DeepSeek V4 / Xiaomi MiMO / OpenCode while maintaining a 99%+ Prompt Cache Hit Rate, 100% intact Thinking blocks, millisecond first-token response, and cutting API costs by up to 90%!**
+> **Connect Claude Desktop (Code & Cowork modes) seamlessly to DeepSeek / OpenCode / Any third-party LLM while maintaining a 99%+ Prompt Cache Hit Rate, 100% intact Thinking blocks, millisecond first-token response, and cutting API costs by up to 90%!**
 
 ---
 
 ## 🌟 Key Features & Architectural Innovations
 
+- **🔌 Zero-Config Philosophy (Dual-Mode Plug-and-Play)**:
+  - Built with a strict **"transparent, seamless, plug-and-play"** design principle: 100% compliant with standard native Anthropic protocols without burdening the client with complex protocol mapping matrices or bloated setting UIs;
+  - **Full Dual-Mode Support**: Seamlessly supports both Claude Desktop **Code Mode** and **Cowork (Code Work / Multi-Agent) Mode** with independent subagent tracing and statistics;
+  - 
 - **⚡ Byte-Level Deterministic Prefix Stabilization (99%+ Cache Hit Rate)**:
   - **`tool_result` Deterministic Sorting**: Sorts parallel tool execution results strictly by `tool_use_id` lexicographical order in `role: "user"` content blocks, eliminating cache drops caused by asynchronous I/O completion jitter;
   - **`tools.sort` + `input_schema` Canonicalization**: Canonicalizes MCP tool schemas with `sort_keys=True` and sorts tools alphabetically for strict byte-level prefix invariance;
-  - **`date_pin` (Session Anchor)**: Pins the original session creation date across multi-day conversations, preventing global cache misses caused by daily timestamp roll-overs;
+  - **`date_pin` (Session Anchor)**: Pins the original session creation date across multi-day conversations, preventing global cache misses caused by daily timestamp roll-overs (with built-in `date_pin_regex_miss` defense alerts);
   - **Billing Header Fixation**: Locks system billing context to prevent client version changes from invalidating the Radix tree prefix.
 - **🧠 Zero-Loss Thinking Hydration & History Un-folding**:
   - Claude Desktop strips `thinking` blocks from memory when idle (>1h) or compacts historical messages;
@@ -32,10 +36,12 @@
   - Strips transient `<system-reminder>` blocks injected into in-memory payloads by the client UI, ensuring a 100% exact structural match with persistent on-disk transcripts.
 - **🛡️ Local Probe Interception (0ms / 0 Token)**:
   - Startup probe requests (`max_tokens=1`) are answered locally by the gateway without forwarding upstream, saving costs and latency.
-- **🎯 Exact Token Passthrough for Translated Models**:
-  - For OpenAI-protocol translated models (e.g. MiMO), `output_tokens` previously relied on character-count estimation; it now uses the exact `completion_tokens` returned by upstream via standard `message_delta`, keeping client usage in 100% agreement with actual provider billing.
 - **📊 Real-time Diagnostics HUD (`/cc-status` / `/ccds-status`)**:
   - Built-in slash command displays instant prompt cache hit rate, context tokens, upstream vs intercepted calls, cache drop alerts, and live OpenCode / DeepSeek balance probes.
+- **🛣️ Ecosystem Roadmap: Custom-Engineered OpenAI Protocol Translation for Claude Code**:
+  - **Background**: Most mainstream LLMs (open-source and third-party commercial models) natively support only the **OpenAI Chat completions** protocol, whereas Claude Desktop (Code mode) strictly mandates the **Anthropic Messages** protocol with specialized thinking blocks, tool signatures, and streaming constraints;
+  - **Custom Translation Engine**: To bridge this gap, we custom-engineered a high-availability **heterogeneous protocol translation engine** specifically adapted for Claude Code (featuring lossless thinking restoration, stream token synchronization, and full tool calling), currently verified on private backend servers;
+  - **Future Roadmap**: To preserve the local plugin's lightweight and zero-configuration design, the plugin currently functions purely as a standard client-side gateway. Depending on community feedback and demand, we plan to release this specialized Claude Code translation engine as a standalone open-source gateway script or an optional built-in module. Stay tuned!
 
 ---
 
@@ -146,6 +152,26 @@ You'll see the live HUD:
 | **Parallel Tool Ordering** | Asynchronous tool completion order jitter causes cache misses | **Deterministic Full Sorting**: Sorts `tool_result` by ID for byte-level determinism |
 | **System Reminders (<system-reminder>)** | Dynamic runtime reminder tags break fingerprint matching | **Transient Tag Stripping**: Clean fingerprint extraction immune to UI injections |
 | **Context Compaction (/compact)** | Deadlocks or erroneously repends 500k old history | **AST Boundary Truncation**: Truncates cleanly at `compact_boundary` events |
+
+---
+
+## 🛠️ Frequently Asked Questions (FAQ)
+
+### Q1: 503 `Unconfigured Upstream` error?
+- **Cause**: Gateway base URL was set to `http://127.0.0.1:<PORT>` before the local config recorded the true upstream URL.
+- **Solution**: Re-enter your true provider Base URL (e.g. `https://opencode.ai/zen/go`) in 3P settings. The app will restart, and the plugin will auto-capture it upon the next conversation turn.
+
+### Q2: Gateway not running after computer reboot? (Auto Wake-up)
+- **Symptom**: After restarting macOS/Windows, the background local gateway (port 8789) is not running initially.
+- **Zero-Effort Auto Wake-up (Recommended)**:
+  - **Simply send any message in any chat box (even a single character or press Enter)**;
+  - The plugin's built-in `UserPromptSubmit` hook **instantly detects and launches the local gateway & watchdog in 100ms**, fully restoring connectivity!
+- **Manual CLI Management (Alternative)**:
+  ```bash
+  python3 scripts/manager.py start    # Start gateway
+  python3 scripts/manager.py status   # Check status and prompt cache rate
+  python3 scripts/manager.py restart  # Restart gateway
+  ```
 
 ---
 
