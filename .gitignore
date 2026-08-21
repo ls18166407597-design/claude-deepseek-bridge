@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.DS_Store
+config.json
+models.json
+captures/
+logs/
+*.pid
