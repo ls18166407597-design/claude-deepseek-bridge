@@ -6,9 +6,9 @@ import os
 import re
 import threading
 import time
+import urllib.request
+import urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-
-from httppool import request_with_retry, pool_for
 
 HOST = "127.0.0.1"
 PORT_PREFERRED = int(os.environ.get("GATEWAY_PORT", "8789"))
@@ -805,8 +805,11 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
+        self.send_header("Connection", "close")
+        self.close_connection = True
         self.end_headers()
         self.wfile.write(body)
+        self.wfile.flush()
 
     def do_GET(self):
         if self.path.split("?")[0] == "/v1/models":
@@ -934,79 +937,88 @@ class Handler(BaseHTTPRequestHandler):
             ),
             "Accept-Language": "en-US,en;q=0.9",
         }
+        req = urllib.request.Request(upstream_url, data=payload, headers=headers, method="POST")
         try:
-            key, conn, resp = request_with_retry("POST", upstream_url, payload, headers)
-            reusable = False
-            try:
-                self.send_response(resp.status)
-                self.send_header("Content-Type", resp.getheader("Content-Type", "application/json"))
+            with urllib.request.urlopen(req, timeout=300) as upstream:
+                self.send_response(upstream.status)
+                self.send_header("Content-Type", upstream.headers.get("Content-Type", "application/json"))
                 self.send_header("Cache-Control", "no-store")
-                rid = resp.getheader("request-id")
+                self.send_header("Connection", "close")
+                self.close_connection = True
+                rid = upstream.headers.get("request-id")
                 if rid:
                     self.send_header("request-id", rid)
                 self.end_headers()
                 chunks = bytearray()
                 disconnected = False
                 while True:
-                    chunk = resp.read(65536)
+                    chunk = upstream.read(4096)
                     if not chunk:
                         break
                     try:
                         self.wfile.write(chunk)
+                        self.wfile.flush()
                     except (BrokenPipeError, ConnectionResetError):
                         disconnected = True
                         break
                     chunks.extend(chunk)
-                reusable = not disconnected and not resp.will_close
-            finally:
-                pool_for(upstream_url).release(key, conn, reusable)
-            elapsed_ms = int((time.time() - started) * 1000)
-            if disconnected:
+                elapsed_ms = int((time.time() - started) * 1000)
+                if disconnected:
+                    log_event({
+                        "ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+                        "method": "POST",
+                        "client": self.client_address[0],
+                        "model_mapped": parsed["model"],
+                        "event": "client_disconnected",
+                        "elapsed_ms": elapsed_ms,
+                    })
+                    return
+                usage = extract_usage(chunks)
+                bump_stats(
+                    upstream_ok=1,
+                    input_tokens=(usage or {}).get("input_tokens") or 0,
+                    cache_read=(usage or {}).get("cache_read_input_tokens") or 0,
+                    output_tokens=(usage or {}).get("output_tokens") or 0,
+                )
+                record_session(
+                    session_id,
+                    "upstream_ok",
+                    messages=len(parsed.get("messages", []) or []),
+                    usage=usage,
+                    kind=kind,
+                )
                 log_event({
                     "ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
                     "method": "POST",
                     "client": self.client_address[0],
                     "model_mapped": parsed["model"],
-                    "event": "client_disconnected",
+                    "event": "upstream_ok",
+                    "status": upstream.status,
                     "elapsed_ms": elapsed_ms,
+                    "request_id": upstream.headers.get("request-id", ""),
                 })
-                return
-            if resp.status >= 400:
-                bump_stats(http_errors=1)
-                log_event({
-                    "ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
-                    "method": "POST",
-                    "client": self.client_address[0],
-                    "model_mapped": parsed["model"],
-                    "event": "upstream_http_error",
-                    "status": resp.status,
-                    "elapsed_ms": elapsed_ms,
-                })
-                return
-            usage = extract_usage(chunks)
-            bump_stats(
-                upstream_ok=1,
-                input_tokens=(usage or {}).get("input_tokens") or 0,
-                cache_read=(usage or {}).get("cache_read_input_tokens") or 0,
-                output_tokens=(usage or {}).get("output_tokens") or 0,
-            )
-            record_session(
-                session_id,
-                "upstream_ok",
-                messages=len(parsed.get("messages", []) or []),
-                usage=usage,
-                kind=kind,
-            )
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", "replace")
+            bump_stats(http_errors=1)
             log_event({
                 "ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
                 "method": "POST",
                 "client": self.client_address[0],
                 "model_mapped": parsed["model"],
-                "event": "upstream_ok",
-                "status": resp.status,
-                "elapsed_ms": elapsed_ms,
-                "request_id": resp.getheader("request-id", "") or "",
+                "event": "upstream_http_error",
+                "status": exc.code,
+                "elapsed_ms": int((time.time() - started) * 1000),
             })
+            self.send_response(exc.code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Connection", "close")
+            self.close_connection = True
+            self.end_headers()
+            try:
+                self.wfile.write(detail.encode("utf-8"))
+                self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError):
+                pass
         except Exception as exc:
             bump_stats(http_errors=1)
             log_event({

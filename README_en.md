@@ -32,9 +32,6 @@
   - Strips transient `<system-reminder>` blocks injected into in-memory payloads by the client UI, ensuring a 100% exact structural match with persistent on-disk transcripts.
 - **🛡️ Local Probe Interception (0ms / 0 Token)**:
   - Startup probe requests (`max_tokens=1`) are answered locally by the gateway without forwarding upstream, saving costs and latency.
-- **⚡ Upstream Connection Pooling & Safe Retry (httppool)**:
-  - The full chain is HTTPS connection-pooled (local→cloud, cloud→upstream), eliminating per-request TLS handshakes for an even lower first-token latency;
-  - Conservative retry boundary: retries exactly once only when the request is provably unprocessed upstream (send-phase failure / idle peer close). Ambiguous failures are never retried, so **LLM calls can never be double-billed**.
 - **🎯 Exact Token Passthrough for Translated Models**:
   - For OpenAI-protocol translated models (e.g. MiMO), `output_tokens` previously relied on character-count estimation; it now uses the exact `completion_tokens` returned by upstream via standard `message_delta`, keeping client usage in 100% agreement with actual provider billing.
 - **📊 Real-time Diagnostics HUD (`/cc-status` / `/ccds-status`)**:
