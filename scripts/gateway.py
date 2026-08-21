@@ -27,9 +27,8 @@ LOG_MAX_BYTES = 5 * 1024 * 1024
 STATS_SAVE_INTERVAL = 10  # 统计落盘最小间隔（秒）：批量化，避免每请求多次全量原子写
 MAX_SESSIONS = 300  # session_stats 会话条目上限，防文件无限增长
 
-# 模型映射：优先读 ~/.ccds-bridge/models.json，不存在时用硬编码兜底。
-# 服务器不再维护 MODEL_MAP，模型名由本地插件统一映射。
 MODELS_CONFIG_FILE = os.path.join(BASE_DIR, "models.json")
+_cached_models = None
 MODELS_CONFIG_MTIME = 0.0  # 用于热加载检测
 
 MODELS_DEFAULTS = {
@@ -46,17 +45,20 @@ MODELS_DEFAULTS = {
 
 def read_models_config():
     """读取 models.json，文件不存在或解析失败时退回硬编码默认值。"""
-    global MODELS_CONFIG_MTIME
+    global MODELS_CONFIG_MTIME, _cached_models
     try:
         mtime = os.path.getmtime(MODELS_CONFIG_FILE)
-        if mtime != MODELS_CONFIG_MTIME:
+        if _cached_models is None or mtime != MODELS_CONFIG_MTIME:
             MODELS_CONFIG_MTIME = mtime
             with open(MODELS_CONFIG_FILE, "r", encoding="utf-8") as fh:
                 data = json.load(fh)
             if isinstance(data, dict) and data:
-                return data
+                _cached_models = data
+        if _cached_models:
+            return dict(_cached_models)
     except (OSError, json.JSONDecodeError, ValueError):
         MODELS_CONFIG_MTIME = 0.0
+        _cached_models = None
     return dict(MODELS_DEFAULTS)
 
 
@@ -330,11 +332,12 @@ def extract_session_id(parsed):
 
 
 def map_model(model):
-    """直接字典查找：配置文件包含所有别名，无需前缀匹配。"""
+    """直接字典查找：自动剥离 [1m] 等上下文后缀并从 models.json 获取真实映射。"""
     global _models
     _models = read_models_config()
-    model = (model or "").strip()
-    return _models.get(model.lower()) or model or "deepseek-v4-flash"
+    raw = (model or "").strip()
+    clean = re.sub(r"\[.*?\]$", "", raw).strip().lower()
+    return _models.get(clean) or _models.get(raw.lower()) or raw or "deepseek-v4-flash"
 
 
 def log_event(event):
@@ -794,12 +797,10 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
-        clean_path = self.path.split("?")[0]
-        if clean_path in ("/v1/models", "/models"):
-            current_models = sorted(read_models_config().keys())
+        if self.path.split("?")[0] == "/v1/models":
             self._send_json(200, {
                 "object": "list",
-                "data": [{"id": m, "object": "model"} for m in current_models],
+                "data": [{"id": m, "object": "model"} for m in MODEL_LIST],
             })
             log_event({
                 "ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
