@@ -582,10 +582,10 @@ def parse_transcript_data(tpath):
                 continue
 
             dtype = d.get("type")
-            # 遇到压缩分界线 (compact_boundary)，自动清空被压缩丢弃的旧历史，以最后一次分界线为物理基准
+            # 遇到压缩分界线 (compact_boundary)，自动清空被压缩丢弃的旧历史消息列表（防止历史越界拼回）
+            # 注意：严禁清空 index！thinking 索引是全局查表资产，必须保留全会话各轮次的思维链补齐能力
             if dtype == "system" and d.get("subtype") == "compact_boundary":
                 msgs = []
-                index = {}
                 current_asst_blocks = []
                 current_turn_thinking = []
                 continue
@@ -672,6 +672,9 @@ def hydrate_and_stabilize_messages(parsed, session_id, kind):
     for m in incoming_msgs:
         if isinstance(m, dict) and m.get("role") == "assistant":
             c = m.get("content")
+            if isinstance(c, str):
+                missing_thinking = True
+                break
             if isinstance(c, list):
                 if not any(isinstance(b, dict) and b.get("type") == "thinking" for b in c):
                     missing_thinking = True
@@ -717,6 +720,9 @@ def hydrate_and_stabilize_messages(parsed, session_id, kind):
         if not isinstance(m, dict) or m.get("role") != "assistant":
             continue
         c = m.get("content")
+        if isinstance(c, str):
+            c = [{"type": "text", "text": c}]
+            m["content"] = c
         if not isinstance(c, list):
             continue
         has_thinking = any(isinstance(b, dict) and b.get("type") == "thinking" for b in c)
