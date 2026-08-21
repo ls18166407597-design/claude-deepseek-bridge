@@ -19,9 +19,8 @@
 ## 🌟 Key Features & Architectural Innovations
 
 - **🔌 Zero-Config Philosophy (Dual-Mode Plug-and-Play)**:
-  - Built with a strict **"transparent, seamless, plug-and-play"** design principle: 100% compliant with standard native Anthropic protocols without burdening the client with complex protocol mapping matrices or bloated setting UIs;
-  - **Full Dual-Mode Support**: Seamlessly supports both Claude Desktop **Code Mode** and **Cowork (Code Work / Multi-Agent) Mode** with independent subagent tracing and statistics;
-  - 
+  - Built with a strict **"transparent, seamless, plug-and-play"** design principle: 100% compliant with standard native Anthropic protocols without burdening the client with complex setting UIs;
+  - **Full Dual-Mode Support**: Seamlessly supports both Claude Desktop **Code Mode** and **Cowork (Code Work / Multi-Agent) Mode** with independent subagent tracing and statistics.
 - **⚡ Byte-Level Deterministic Prefix Stabilization (99%+ Cache Hit Rate)**:
   - **`tool_result` Deterministic Sorting**: Sorts parallel tool execution results strictly by `tool_use_id` lexicographical order in `role: "user"` content blocks, eliminating cache drops caused by asynchronous I/O completion jitter;
   - **`tools.sort` + `input_schema` Canonicalization**: Canonicalizes MCP tool schemas with `sort_keys=True` and sorts tools alphabetically for strict byte-level prefix invariance;
