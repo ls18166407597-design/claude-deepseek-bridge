@@ -156,7 +156,7 @@ def check_runtime_dir():
                 cfg = {}
         old = cfg.get("runtime_script_dir")
         if old and old != SCRIPT_DIR:
-            print("插件代码路径变化：%s -> %s，重启本地服务" % (old, SCRIPT_DIR))
+            qprint("插件代码路径变化：%s -> %s，重启本地服务" % (old, SCRIPT_DIR))
             stop(KEEPALIVE_PID, "keepalive")
             stop(GATEWAY_PID, "gateway")
         cfg["runtime_script_dir"] = SCRIPT_DIR
@@ -215,9 +215,9 @@ def _sync_locked():
     if last_sync and newest <= last_sync:
         upstream = cfg.get("upstream_url")
         if upstream:
-            print("配置无变化，跳过 sync（upstream:", upstream, "）")
+            qprint("配置无变化，跳过 sync（upstream:", upstream, "）")
             return upstream
-        print("配置无变化但 upstream 缺失，进入恢复逻辑")
+        qprint("配置无变化但 upstream 缺失，进入恢复逻辑")
     changed = []
 
     # 在 sync 阶段确定本次要用的端口：
@@ -262,30 +262,30 @@ def _sync_locked():
                     bak_url = (bak.get("inferenceGatewayBaseUrl") or "").strip().rstrip("/")
                     if bak_url and not bak_url.startswith("http://127.0.0.1:"):
                         cfg["upstream_url"] = normalize_upstream(bak_url)
-                        print("recovered upstream from backup:", cfg["upstream_url"])
+                        qprint("recovered upstream from backup:", cfg["upstream_url"])
                 except OSError:
                     pass
     cfg["last_sync_ts"] = time.time()
     with open(CONFIG, "w", encoding="utf-8") as fh:
         json.dump(cfg, fh, ensure_ascii=False, indent=1)
     for line in changed:
-        print("synced:", line)
+        qprint("synced:", line)
     if changed and gateway_alive():
         stop(GATEWAY_PID, "gateway")
         if _spawn_unlocked(GATEWAY, [], "gateway", GATEWAY_PID):
-            print("gateway 已重启以应用新上游")
+            qprint("gateway 已重启以应用新上游")
     upstream = cfg.get("upstream_url")
     if not upstream:
         print("未配置上游：请在 3P 设置里把网关地址填成你要访问的真实地址"
               "（保存后应用会重启），插件下次会自动接管。")
         return None
-    print("upstream_url:", upstream)
+    qprint("upstream_url:", upstream)
     return upstream
 
 
 def _spawn_unlocked(script, args, name, pid_file):
     if is_running(pid_file) or (name == "gateway" and gateway_alive()):
-        print("%s already running" % name)
+        qprint("%s already running" % name)
         return False
     log = open(os.path.join(BASE, "logs", name + ".log"), "a", encoding="utf-8")
     kwargs = {"stdout": log, "stderr": subprocess.STDOUT}
@@ -299,7 +299,7 @@ def _spawn_unlocked(script, args, name, pid_file):
     )
     with open(pid_file, "w", encoding="utf-8") as fh:
         fh.write(str(proc.pid))
-    print("%s started (pid %d)" % (name, proc.pid))
+    qprint("%s started (pid %d)" % (name, proc.pid))
     return True
 
 
@@ -314,7 +314,7 @@ def spawn(script, args, name, pid_file):
 
 def stop(pid_file, name):
     if not is_running(pid_file):
-        print("%s not running" % name)
+        qprint("%s not running" % name)
         return
     try:
         pid = int(open(pid_file, encoding="utf-8").read().strip())
@@ -337,7 +337,7 @@ def stop(pid_file, name):
         os.remove(pid_file)
     except OSError:
         pass
-    print("%s stopped" % name)
+    qprint("%s stopped" % name)
 
 
 def start():
@@ -373,8 +373,20 @@ def status():
             print("stats read error: %s" % exc)
 
 
+QUIET = False
+
+
+def qprint(*args, **kwargs):
+    """静默模式下不输出（除非是错误场景，错误场景请直接用 print）。"""
+    if not QUIET:
+        print(*args, **kwargs)
+
+
 def main():
-    cmd = sys.argv[1] if len(sys.argv) > 1 else "status"
+    global QUIET
+    args = [a for a in sys.argv[1:] if a != "--quiet"]
+    QUIET = "--quiet" in sys.argv[1:]
+    cmd = args[0] if args else "status"
     if cmd == "start":
         start()
     elif cmd == "stop":

@@ -796,6 +796,53 @@ def extract_usage(data):
     return usage if usage else None
 
 
+class UsageCapture:
+    """流式 usage 提取器：只保留 message_start 和尾部滑动窗口，不缓存全量响应体。"""
+    WINDOW_SIZE = 8192  # 尾部滑动窗口大小（字节）
+
+    def __init__(self):
+        self._usage = {}
+        self._tail = b""
+        self._tail_len = 0
+
+    def feed(self, chunk: bytes):
+        """喂入一块原始字节流，增量提取 usage。"""
+        # 逐行扫描 message_start（出现在流的最前面）
+        if not self._usage:
+            text = chunk.decode("utf-8", "replace")
+            for line in text.splitlines():
+                if line.startswith("data: "):
+                    try:
+                        d = json.loads(line[6:])
+                    except Exception:
+                        continue
+                    if d.get("type") == "message_start":
+                        m = d.get("message", {})
+                        if m.get("usage") and isinstance(m["usage"], dict):
+                            self._usage.update(m["usage"])
+        # 尾部滑动窗口：只保留最后 WINDOW_SIZE 字节（用于提取 message_delta）
+        self._tail += chunk
+        self._tail_len += len(chunk)
+        if self._tail_len > self.WINDOW_SIZE * 2:
+            self._tail = self._tail[-self.WINDOW_SIZE:]
+            self._tail_len = len(self._tail)
+
+    def get_usage(self):
+        """从尾部窗口中提取 message_delta 的 usage，与 message_start 合并返回。"""
+        usage = dict(self._usage)
+        text = self._tail.decode("utf-8", "replace")
+        for line in text.splitlines():
+            if line.startswith("data: "):
+                try:
+                    d = json.loads(line[6:])
+                except Exception:
+                    continue
+                if d.get("type") == "message_delta":
+                    if d.get("usage") and isinstance(d["usage"], dict):
+                        usage.update(d["usage"])
+        return usage if usage else None
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         pass
@@ -949,7 +996,7 @@ class Handler(BaseHTTPRequestHandler):
                 if rid:
                     self.send_header("request-id", rid)
                 self.end_headers()
-                chunks = bytearray()
+                cap = UsageCapture()
                 disconnected = False
                 while True:
                     chunk = upstream.read(4096)
@@ -961,7 +1008,7 @@ class Handler(BaseHTTPRequestHandler):
                     except (BrokenPipeError, ConnectionResetError):
                         disconnected = True
                         break
-                    chunks.extend(chunk)
+                    cap.feed(chunk)
                 elapsed_ms = int((time.time() - started) * 1000)
                 if disconnected:
                     log_event({
@@ -973,7 +1020,7 @@ class Handler(BaseHTTPRequestHandler):
                         "elapsed_ms": elapsed_ms,
                     })
                     return
-                usage = extract_usage(chunks)
+                usage = cap.get_usage()
                 bump_stats(
                     upstream_ok=1,
                     input_tokens=(usage or {}).get("input_tokens") or 0,
