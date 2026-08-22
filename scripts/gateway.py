@@ -86,16 +86,26 @@ def normalize_upstream(url):
     return url
 
 
+_upstream_cache = None
+_upstream_mtime = 0.0
+
+
 def load_upstream():
+    global _upstream_cache, _upstream_mtime
     try:
+        mtime = os.path.getmtime(CONFIG_FILE)
+        if _upstream_cache is not None and mtime == _upstream_mtime:
+            return _upstream_cache
+        _upstream_mtime = mtime
         with open(CONFIG_FILE, "r", encoding="utf-8") as fh:
             cfg = json.load(fh)
         url = (cfg.get("upstream_url") or "").strip()
-        if url:
-            return normalize_upstream(url)
+        _upstream_cache = normalize_upstream(url) if url else None
+        return _upstream_cache
     except OSError:
-        pass
-    return None
+        _upstream_mtime = 0.0
+        _upstream_cache = None
+        return None
 
 
 CACHE_STABILIZE = os.environ.get("CACHE_STABILIZE", os.environ.get("CCDS_CACHE_STABILIZE", "1")) != "0"
@@ -428,7 +438,7 @@ def canonicalize(parsed):
                     b["text"] = pin
                     changed.append("billing_header")
     for m in parsed.get("messages", []) or []:
-        if not isinstance(m, dict):
+        if not isinstance(m, dict) or m.get("role") != "user":
             continue
         c = m.get("content")
         if isinstance(c, str):
