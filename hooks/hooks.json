@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/manager.py\" ensure >> \"$HOME/.ccds-bridge/logs/hook.log\" 2>&1"
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/manager.py\" ensure --quiet"
           }
         ]
       }

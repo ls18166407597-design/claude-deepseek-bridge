@@ -102,7 +102,7 @@ def load_upstream():
         url = (cfg.get("upstream_url") or "").strip()
         _upstream_cache = normalize_upstream(url) if url else None
         return _upstream_cache
-    except OSError:
+    except Exception:
         _upstream_mtime = 0.0
         _upstream_cache = None
         return None
@@ -807,19 +807,27 @@ def extract_usage(data):
 
 
 class UsageCapture:
-    """流式 usage 提取器：只保留 message_start 和尾部滑动窗口，不缓存全量响应体。"""
+    """流式与非流式 usage 提取器：支持 SSE 增量窗口与非流式 JSON，不缓存全量长文本。"""
     WINDOW_SIZE = 8192  # 尾部滑动窗口大小（字节）
 
     def __init__(self):
         self._usage = {}
+        self._head = b""
         self._tail = b""
         self._tail_len = 0
+        self._is_sse = None
 
     def feed(self, chunk: bytes):
-        """喂入一块原始字节流，增量提取 usage。"""
-        # 逐行扫描 message_start（出现在流的最前面）
-        if not self._usage:
-            text = chunk.decode("utf-8", "replace")
+        """增量接收字节流并提取 usage。"""
+        if self._is_sse is None and chunk:
+            stripped = chunk.lstrip()
+            if stripped:
+                self._is_sse = stripped.startswith(b"event:") or stripped.startswith(b"data:")
+
+        # SSE 流式：头部提取 message_start
+        if self._is_sse and not self._usage:
+            self._head += chunk
+            text = self._head.decode("utf-8", "replace")
             for line in text.splitlines():
                 if line.startswith("data: "):
                     try:
@@ -830,7 +838,12 @@ class UsageCapture:
                         m = d.get("message", {})
                         if m.get("usage") and isinstance(m["usage"], dict):
                             self._usage.update(m["usage"])
-        # 尾部滑动窗口：只保留最后 WINDOW_SIZE 字节（用于提取 message_delta）
+                            self._head = b""
+                            break
+            if len(self._head) > self.WINDOW_SIZE:
+                self._head = b""
+
+        # 尾部滑动窗口：保留最后 WINDOW_SIZE 字节
         self._tail += chunk
         self._tail_len += len(chunk)
         if self._tail_len > self.WINDOW_SIZE * 2:
@@ -838,7 +851,17 @@ class UsageCapture:
             self._tail_len = len(self._tail)
 
     def get_usage(self):
-        """从尾部窗口中提取 message_delta 的 usage，与 message_start 合并返回。"""
+        """解析并返回最终聚合的 usage 字典。"""
+        # 1. 非流式纯 JSON 响应
+        if self._is_sse is False:
+            try:
+                data = json.loads(self._tail.decode("utf-8", "replace"))
+                if isinstance(data, dict) and isinstance(data.get("usage"), dict):
+                    return data["usage"]
+            except Exception:
+                pass
+
+        # 2. SSE 流式响应：从尾部窗口提取 message_delta / usage
         usage = dict(self._usage)
         text = self._tail.decode("utf-8", "replace")
         for line in text.splitlines():
@@ -850,6 +873,8 @@ class UsageCapture:
                 if d.get("type") == "message_delta":
                     if d.get("usage") and isinstance(d["usage"], dict):
                         usage.update(d["usage"])
+                elif d.get("type") == "ping" and isinstance(d.get("usage"), dict):
+                    usage.update(d["usage"])
         return usage if usage else None
 
 
