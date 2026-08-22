@@ -108,7 +108,7 @@ def acquire_lock():
                 except OSError:
                     pass
             time.sleep(0.01)
-    print("警告：等待 spawn 锁超时，继续执行")
+    log_msg("警告：等待 spawn 锁超时，继续执行")
     return None
 
 
@@ -156,7 +156,7 @@ def check_runtime_dir():
                 cfg = {}
         old = cfg.get("runtime_script_dir")
         if old and old != SCRIPT_DIR:
-            qprint("插件代码路径变化：%s -> %s，重启本地服务" % (old, SCRIPT_DIR))
+            log_msg("插件代码路径变化：%s -> %s，重启本地服务" % (old, SCRIPT_DIR))
             stop(KEEPALIVE_PID, "keepalive")
             stop(GATEWAY_PID, "gateway")
         cfg["runtime_script_dir"] = SCRIPT_DIR
@@ -215,9 +215,9 @@ def _sync_locked():
     if last_sync and newest <= last_sync:
         upstream = cfg.get("upstream_url")
         if upstream:
-            qprint("配置无变化，跳过 sync（upstream:", upstream, "）")
+            log_msg("配置无变化，跳过 sync（upstream:", upstream, "）")
             return upstream
-        qprint("配置无变化但 upstream 缺失，进入恢复逻辑")
+        log_msg("配置无变化但 upstream 缺失，进入恢复逻辑")
     changed = []
 
     # 在 sync 阶段确定本次要用的端口：
@@ -249,7 +249,7 @@ def _sync_locked():
                     json.dump(data, fh, ensure_ascii=False, indent=2)
                 changed.append("3P: %s -> %s (upstream %s)" % (url, cur_local_url, cfg["upstream_url"]))
             except OSError as exc:
-                print("3P 配置改写失败:", path, exc)
+                log_msg("3P 配置改写失败:", path, exc)
     # 兜底：并发旧版本曾导致 upstream 丢失（3P 已是本地地址但 config 无上游），从备份恢复
     if not cfg.get("upstream_url"):
         for path, data in find_3p_configs():
@@ -262,30 +262,30 @@ def _sync_locked():
                     bak_url = (bak.get("inferenceGatewayBaseUrl") or "").strip().rstrip("/")
                     if bak_url and not bak_url.startswith("http://127.0.0.1:"):
                         cfg["upstream_url"] = normalize_upstream(bak_url)
-                        qprint("recovered upstream from backup:", cfg["upstream_url"])
+                        log_msg("recovered upstream from backup:", cfg["upstream_url"])
                 except OSError:
                     pass
     cfg["last_sync_ts"] = time.time()
     with open(CONFIG, "w", encoding="utf-8") as fh:
         json.dump(cfg, fh, ensure_ascii=False, indent=1)
     for line in changed:
-        qprint("synced:", line)
+        log_msg("synced:", line)
     if changed and gateway_alive():
         stop(GATEWAY_PID, "gateway")
         if _spawn_unlocked(GATEWAY, [], "gateway", GATEWAY_PID):
-            qprint("gateway 已重启以应用新上游")
+            log_msg("gateway 已重启以应用新上游")
     upstream = cfg.get("upstream_url")
     if not upstream:
-        print("未配置上游：请在 3P 设置里把网关地址填成你要访问的真实地址"
-              "（保存后应用会重启），插件下次会自动接管。")
+        log_msg("未配置上游：请在 3P 设置里把网关地址填成你要访问的真实地址"
+                "（保存后应用会重启），插件下次会自动接管。")
         return None
-    qprint("upstream_url:", upstream)
+    log_msg("upstream_url:", upstream)
     return upstream
 
 
 def _spawn_unlocked(script, args, name, pid_file):
     if is_running(pid_file) or (name == "gateway" and gateway_alive()):
-        qprint("%s already running" % name)
+        log_msg("%s already running" % name)
         return False
     log = open(os.path.join(BASE, "logs", name + ".log"), "a", encoding="utf-8")
     kwargs = {"stdout": log, "stderr": subprocess.STDOUT}
@@ -299,7 +299,7 @@ def _spawn_unlocked(script, args, name, pid_file):
     )
     with open(pid_file, "w", encoding="utf-8") as fh:
         fh.write(str(proc.pid))
-    qprint("%s started (pid %d)" % (name, proc.pid))
+    log_msg("%s started (pid %d)" % (name, proc.pid))
     return True
 
 
@@ -314,7 +314,7 @@ def spawn(script, args, name, pid_file):
 
 def stop(pid_file, name):
     if not is_running(pid_file):
-        qprint("%s not running" % name)
+        log_msg("%s not running" % name)
         return
     try:
         pid = int(open(pid_file, encoding="utf-8").read().strip())
@@ -332,12 +332,12 @@ def stop(pid_file, name):
             os.kill(pid, sig_kill)
             time.sleep(0.2)
     except Exception as exc:
-        print("stop %s error: %s" % (name, exc))
+        log_msg("stop %s error: %s" % (name, exc))
     try:
         os.remove(pid_file)
     except OSError:
         pass
-    qprint("%s stopped" % name)
+    log_msg("%s stopped" % name)
 
 
 def start():
@@ -373,13 +373,19 @@ def status():
             print("stats read error: %s" % exc)
 
 
-QUIET = False
-
-
-def qprint(*args, **kwargs):
-    """静默模式下不输出（除非是错误场景，错误场景请直接用 print）。"""
+def log_msg(*args):
+    """统一日志记录：在 --quiet 模式下完全静默 stdout 并记录到 manager.log。"""
+    msg = " ".join(str(a) for a in args)
     if not QUIET:
-        print(*args, **kwargs)
+        print(msg)
+    try:
+        log_dir = os.path.join(BASE, "logs")
+        os.makedirs(log_dir, exist_ok=True)
+        with open(os.path.join(log_dir, "manager.log"), "a", encoding="utf-8") as fh:
+            ts = time.strftime("%Y-%m-%d %H:%M:%S")
+            fh.write("[%s] %s\n" % (ts, msg))
+    except Exception:
+        pass
 
 
 def main():
