@@ -6,7 +6,5 @@
     "name": "ccds-bridge"
   },
   "license": "MIT",
-  "repository": "https://github.com/ls18166407597-design/claude-model-bridge",
-  "hooks": "./hooks/hooks.json",
-  "commands": "./commands"
+  "repository": "https://github.com/ls18166407597-design/claude-model-bridge"
 }
