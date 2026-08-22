@@ -6,7 +6,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License">
-  <img src="https://img.shields.io/badge/Version-0.1.52-brightgreen.svg" alt="Version">
+  <img src="https://img.shields.io/badge/Version-0.1.53-brightgreen.svg" alt="Version">
   <img src="https://img.shields.io/badge/Prompt_Cache-99%25%2B-orange.svg" alt="Cache Rate">
   <img src="https://img.shields.io/badge/Thinking-100%25_Preserved-purple.svg" alt="Thinking">
   <img src="https://img.shields.io/badge/Platform-macOS_%7C_Windows-blueviolet.svg" alt="Platform">
