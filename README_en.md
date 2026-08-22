@@ -80,15 +80,36 @@ In the **Connection** tab:
 - **Gateway auth scheme**: Leave as default (`x-api-key`).
 
 #### 2. Client Model Naming & Agent Toolchain Activation Guide
-Claude Desktop includes an internal naming filter rules regex that blocks competitors' brand names (`deepseek`, `mimo`, `qwen`, `openai`, etc.). Use clean whitelist aliases in the Model ID (`name`), and set your preferred display name in `labelOverride`:
 
-| Model ID (`name`) in 3P Settings | Mapped Upstream Model | Description |
-|---|---|---|
-| **`claude-sonnet-5`** | `deepseek-v4-flash` | ⚡ Ultra-fast daily coding, 1M context (Recommended) |
-| **`claude-opus-5`** | `deepseek-v4-pro` | 🧠 Deep architectural reasoning, 1M context |
-| **`claude-sonnet-4-8`** | `x-preview-f-free` | 🎁 Ox Alpha Free 1M context reasoning (Free tier) |
-| **`claude-sonnet-4-6`** | `mimo-v2.5` | 📱 Xiaomi MiMO 2.5 Generalist Agent |
-| **`claude-opus-4-6`** | `mimo-v2.5-pro` | 📱 Xiaomi MiMO 2.5 Pro Flagship |
+Empirical compatibility testing reveals two key client-side validation rules for Model IDs:
+
+1. **Rule 1: Third-Party Brand Name Filter**
+   - Claude Desktop filters Model IDs containing third-party vendor brand names (such as `deepseek`, `openai`, `mimo`, `qwen`, etc.), showing a naming validation error in the UI.
+
+2. **Rule 2: Capability Tier & Advanced Toolchain Activation (Crucial Caveat)**
+   - Claude Desktop determines agent capability based on the Model ID format;
+   - **If the Model ID does not follow the standard `claude-sonnet-...` or `claude-opus-...` pattern**, the client treats it as a basic lightweight model and **silently disables core Agent coding tools (missing the 87+ tool suite and degrading into basic chat)**.
+
+> 💡 **Best Practice**: Use our recommended whitelist aliases (such as `claude-sonnet-5`, `claude-sonnet-4-8`), which pass the name validation cleanly while **fully unlocking the 87+ Agent toolchain**!
+
+#### 3. Recommended Whitelist Models Table (Full 87+ Toolchain Unlocked)
+
+In the **Model list** section, click **+ Add** to add the recommended models. Expanding each item reveals the precise roles of the three key fields:
+
+1. **Model ID (Internal Identifier)**: **Must follow the official whitelist format** (e.g. `claude-sonnet-5`, `claude-sonnet-4-8`), ensuring compliance with client-side naming rules and unlocking the full 87+ Agent toolchain;
+2. **Display name (UI Label)**: **Recommended to enter the actual upstream model name** (e.g. `DeepSeek V4 Flash`, `Xiaomi MiMO 2.5`, `Ox Alpha Free`), or any custom name of your choice (purely visual in the model picker dropdown and does not affect backend routing);
+3. **Offer 1M-context variant (1M Context Toggle)**: **Recommended to toggle ON** (provides a 1-Million token context option in the model picker, unleashing extreme long-context reasoning).
+
+| Model ID (`name`)<br>*(Official Whitelist Format)* | Display name (`labelOverride`)<br>*(Upstream Name or Custom)* | Offer 1M-context<br>*(1M Context)* | Actual Upstream Model | Description & Use Case |
+|---|---|:---:|---|---|
+| **`claude-sonnet-5`** | `DeepSeek V4 Flash` | ✅ ON | `deepseek-v4-flash` | ⚡ Ultra-fast daily coding, 87+ tools unlocked (Recommended) |
+| **`claude-opus-5`** | `DeepSeek V4 Pro` | ✅ ON | `deepseek-v4-pro` | 🧠 Complex architecture & deep reasoning, 87+ tools unlocked |
+| **`claude-sonnet-4-8`** | `Ox Alpha Free` | ✅ ON | `x-preview-f-free` | 🎁 1M ultra-long context reasoning (Free preview) |
+| **`claude-sonnet-4-6`** | `Xiaomi MiMO 2.5` | ✅ ON | `mimo-v2.5` | 📱 Xiaomi MiMO 2.5 All-Rounder (Multi-modal agent toolchain) |
+| **`claude-opus-4-6`** | `Xiaomi MiMO 2.5 Pro` | ✅ ON | `mimo-v2.5-pro` | 📱 Xiaomi MiMO 2.5 Pro Flagship |
+
+> 💡 **Configure Once, Enjoy Forever**: Add all 5 models during initial setup. You can switch freely between them in the model picker dropdown without touching configuration again!
+> Map additional custom models anytime via `/cc-config-add <alias> <target-model>` in chat.
 
 ---
 
